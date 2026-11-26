@@ -1,0 +1,6 @@
+-- Esquema aplicado ao projeto Supabase hugo-veiga-portal (migrações: esquema_inicial_portal,
+-- funcoes_em_esquema_privado, pedidos_de_contacto). Referência; já está aplicado.
+-- Tabelas: administradores, empresas, clientes, acessos, documentos, produtos, atividade, pedidos_contacto
+-- Funções (esquema privado): e_admin(), cliente_atual(), tem_acesso(empresa)
+-- Trigger: auth.users insert -> liga clientes.user_id pelo e-mail
+-- Buckets: logotipos (público), documentos (privado; caminho <empresa_id>/...)
