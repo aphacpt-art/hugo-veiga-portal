@@ -15,7 +15,7 @@ export default function SolicitarContacto() {
     const supabase = createClient();
     const { error } = await supabase.from('pedidos_contacto').insert({
       nome: f.nome.trim(), empresa: f.empresa.trim() || null, nif: f.nif.trim() || null,
-      email: f.email.trim(), telefone: f.telefone.trim() || null, mensagem: f.mensagem.trim() || null,
+      email: f.email.trim(), telefone: f.telefone.trim(), mensagem: f.mensagem.trim() || null,
     });
     setAEnviar(false);
     if (error) return setErro('Não foi possível enviar o pedido. Tente novamente.');
@@ -42,8 +42,8 @@ export default function SolicitarContacto() {
           <input id="nif" inputMode="numeric" maxLength={20} value={f.nif} onChange={set('nif')} />
           <label htmlFor="email">E-mail *</label>
           <input id="email" type="email" required maxLength={200} value={f.email} onChange={set('email')} />
-          <label htmlFor="telefone">Telefone</label>
-          <input id="telefone" type="tel" maxLength={40} value={f.telefone} onChange={set('telefone')} />
+          <label htmlFor="telefone">Telemóvel *</label>
+          <input id="telefone" type="tel" inputMode="tel" autoComplete="tel" required minLength={9} maxLength={40} value={f.telefone} onChange={set('telefone')} placeholder="9XX XXX XXX" />
           <label htmlFor="mensagem">Mensagem</label>
           <textarea id="mensagem" rows={3} maxLength={2000} value={f.mensagem} onChange={set('mensagem')}
             placeholder="Que produtos ou marcas lhe interessam?" />
