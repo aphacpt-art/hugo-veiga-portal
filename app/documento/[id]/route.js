@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { linkFicheiro } from '@/lib/webtuga';
 
 export async function GET(request, { params }) {
   const { id } = await params;
@@ -8,7 +9,7 @@ export async function GET(request, { params }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL('/entrar', request.url));
   // RLS garante que só devolve o documento se o cliente tiver acesso à empresa
-  const { data: doc } = await supabase.from('documentos').select('id, titulo, formato, ficheiro_path').eq('id', id).maybeSingle();
+  const { data: doc } = await supabase.from('documentos').select('id, titulo, formato, ficheiro_path, origem').eq('id', id).maybeSingle();
   if (!doc) return new NextResponse('Documento não encontrado.', { status: 404 });
 
   const { data: cliente } = await supabase.from('clientes').select('id').eq('user_id', user.id).maybeSingle();
@@ -19,6 +20,9 @@ export async function GET(request, { params }) {
 
   const ext = doc.ficheiro_path.split('.').pop();
   const nome = `${doc.titulo}.${ext}`.replace(/[\\/:*?"<>|]/g, '-');
+  if (doc.origem === 'webtuga') {
+    return NextResponse.redirect(linkFicheiro(doc.ficheiro_path, { descarregar: acao === 'descarregar', nome }));
+  }
   const { data, error } = await supabase.storage.from('documentos')
     .createSignedUrl(doc.ficheiro_path, 600, acao === 'descarregar' ? { download: nome } : undefined);
   if (error) return new NextResponse('Não foi possível abrir o documento.', { status: 500 });

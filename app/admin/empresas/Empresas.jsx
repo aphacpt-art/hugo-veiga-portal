@@ -18,7 +18,8 @@ export default function Empresas({ iniciais }) {
     const supabase = createClient();
     const dados = { nome: ed.nome.trim(), setor: ed.setor || null, descricao: ed.descricao || null,
       site_url: ed.site_url ? (/^https?:\/\//.test(ed.site_url) ? ed.site_url : `https://${ed.site_url}`) : null,
-      ordem: Number(ed.ordem) || 0, ativa: !!ed.ativa };
+      ordem: Number(ed.ordem) || 0, ativa: !!ed.ativa,
+      pasta_webtuga: (ed.pasta_webtuga || '').trim().replace(/^\/+|\/+$/g, '') || null };
     let id = ed.id;
     const r = id ? await supabase.from('empresas').update(dados).eq('id', id) : await supabase.from('empresas').insert(dados).select('id').single();
     if (r.error) { setAGuardar(false); return setErro(r.error.message); }
@@ -47,6 +48,7 @@ export default function Empresas({ iniciais }) {
               <input id="setor" list="setores" value={ed.setor ?? ''} onChange={(e) => setEd({ ...ed, setor: e.target.value })} />
               <datalist id="setores"><option value="Decoração" /><option value="Souvenirs" /><option value="Místicos e esotéricos" /></datalist></div>
             <div><label htmlFor="site">Site da marca</label><input id="site" value={ed.site_url ?? ''} onChange={(e) => setEd({ ...ed, site_url: e.target.value })} placeholder="www.marca.pt" /></div>
+            <div><label htmlFor="pasta">Pasta dos catálogos na Webtuga</label><input id="pasta" value={ed.pasta_webtuga ?? ''} onChange={(e) => setEd({ ...ed, pasta_webtuga: e.target.value })} placeholder="ex.: marca-x" /></div>
             <div><label htmlFor="ordem">Ordem de apresentação</label><input id="ordem" type="number" value={ed.ordem} onChange={(e) => setEd({ ...ed, ordem: e.target.value })} /></div>
           </div>
           <label htmlFor="desc">Descrição curta</label>

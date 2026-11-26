@@ -1,5 +1,6 @@
 'use server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { listarPasta, linkFicheiro } from '@/lib/webtuga';
 
 async function exigirAdmin() {
   const supabase = await createClient();
@@ -31,4 +32,33 @@ export async function enviarConvites(ids) {
     resultado.enviados++;
   }
   return resultado;
+}
+
+// Cria documentos para os ficheiros novos nas pastas da Webtuga. Devolve os PDF sem capa, com link temporário
+export async function sincronizarPastas() {
+  const supabase = await exigirAdmin();
+  const { data: empresas } = await supabase.from('empresas').select('id, nome, pasta_webtuga').not('pasta_webtuga', 'is', null);
+  const res = { novos: 0, erros: [], semPasta: 0, capas: [] };
+  if (!empresas?.length) { res.erros.push('Nenhuma empresa tem pasta da Webtuga definida (Empresas > editar).'); return res; }
+  for (const emp of empresas) {
+    let lista;
+    try { lista = await listarPasta(emp.pasta_webtuga); } catch (e) { res.erros.push(`${emp.nome}: ${e.message}`); continue; }
+    const caminhos = lista.map((f) => `${emp.pasta_webtuga}/${f.nome}`);
+    const { data: existentes } = await supabase.from('documentos').select('ficheiro_path').eq('origem', 'webtuga').in('ficheiro_path', caminhos.length ? caminhos : ['-']);
+    const ja = new Set((existentes || []).map((d) => d.ficheiro_path));
+    const novos = lista.filter((f) => !ja.has(`${emp.pasta_webtuga}/${f.nome}`)).map((f) => {
+      const titulo = f.nome.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+      const formato = /\.pdf$/i.test(f.nome) ? 'pdf' : 'excel';
+      const tipo = /pre[cç]o|tabela|price|tarifa/i.test(titulo) ? 'precos' : 'catalogo';
+      return { empresa_id: emp.id, origem: 'webtuga', ficheiro_path: `${emp.pasta_webtuga}/${f.nome}`, titulo, formato, tipo, tamanho_bytes: f.tamanho };
+    });
+    if (novos.length) {
+      const { error } = await supabase.from('documentos').insert(novos);
+      if (error) { res.erros.push(`${emp.nome}: ${error.message}`); continue; }
+      res.novos += novos.length;
+    }
+  }
+  const { data: semCapa } = await supabase.from('documentos').select('id, empresa_id, ficheiro_path').eq('origem', 'webtuga').eq('formato', 'pdf').is('capa_path', null).limit(50);
+  res.capas = (semCapa || []).map((d) => ({ id: d.id, empresa_id: d.empresa_id, url: linkFicheiro(d.ficheiro_path, { segundos: 1800 }) }));
+  return res;
 }

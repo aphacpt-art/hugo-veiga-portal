@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { gerarCapaPdf } from '@/lib/capaPdf';
+import { sincronizarPastas } from '../actions';
 
 const TIPOS = [['catalogo', 'Catálogo'], ['precos', 'Tabela de preços'], ['outro', 'Outro']];
 const formatoDe = (nome) => /\.(xlsx|xls|csv)$/i.test(nome) ? 'excel' : /\.pdf$/i.test(nome) ? 'pdf' : null;
@@ -51,15 +52,36 @@ export default function Documentos({ empresas, docs, filtro }) {
     router.refresh();
   }
 
+  async function sincronizar() {
+    setAEnviar(true); setEstado('A procurar ficheiros novos na Webtuga…');
+    try {
+      const r = await sincronizarPastas();
+      const supabase = createClient();
+      let capas = 0;
+      for (const [i, d] of r.capas.entries()) {
+        setEstado(`${r.novos} documento(s) novo(s). A gerar capas ${i + 1}/${r.capas.length}…`);
+        try {
+          const img = await gerarCapaPdf(d.url);
+          const capa_path = `${d.empresa_id}/capas/${d.id}.jpg`;
+          const up = await supabase.storage.from('documentos').upload(capa_path, img, { contentType: 'image/jpeg', upsert: true });
+          if (!up.error) { await supabase.from('documentos').update({ capa_path }).eq('id', d.id); capas++; }
+        } catch { /* fica sem capa; tenta na próxima sincronização */ }
+      }
+      setEstado(`${r.novos} documento(s) novo(s), ${capas} capa(s) criada(s).${r.erros.length ? ' Erros: ' + r.erros.join('; ') : ''}`);
+    } catch (e) { setEstado(e.message); }
+    setAEnviar(false); router.refresh();
+  }
+
   async function atualizar(id, dados) {
     await createClient().from('documentos').update(dados).eq('id', id);
     router.refresh();
   }
 
   async function apagar(d) {
-    if (!window.confirm(`Apagar “${d.titulo}”? Os clientes deixam de o ver.`)) return;
+    if (!window.confirm(`Apagar “${d.titulo}”? Os clientes deixam de o ver.${d.origem === 'webtuga' ? ' O ficheiro continua na Webtuga; apague-o lá também, senão volta na próxima sincronização.' : ''}`)) return;
     const supabase = createClient();
-    await supabase.storage.from('documentos').remove([d.ficheiro_path, d.capa_path].filter(Boolean));
+    const remover = [d.origem === 'webtuga' ? null : d.ficheiro_path, d.capa_path].filter(Boolean);
+    if (remover.length) await supabase.storage.from('documentos').remove(remover);
     await supabase.from('documentos').delete().eq('id', d.id);
     router.refresh();
   }
@@ -67,8 +89,16 @@ export default function Documentos({ empresas, docs, filtro }) {
   return (
     <>
       <h1>Documentos</h1>
+      <div className="card pad" style={{ marginBottom: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Catálogos no alojamento Webtuga</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Coloque os ficheiros por FTP ou pelo Gestor de Ficheiros do cPanel na pasta <code>catalogos/&lt;pasta da marca&gt;</code> e carregue em Sincronizar. Os ficheiros novos aparecem aqui e as capas dos PDF são criadas automaticamente.</p>
+        <div className="linha">
+          <button type="button" className="btn primario" disabled={aEnviar} onClick={sincronizar}>Sincronizar pastas</button>
+          {estado && <span role="status" className="muted">{estado}</span>}
+        </div>
+      </div>
       <form className="card pad" onSubmit={carregar}>
-        <h2 style={{ marginTop: 0 }}>Carregar catálogos ou tabelas de preços</h2>
+        <h2 style={{ marginTop: 0 }}>Ou carregar aqui (ficheiros pequenos, até 50 MB)</h2>
         <div className="cols2">
           <div><label htmlFor="emp">Empresa *</label>
             <select id="emp" required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
@@ -86,7 +116,6 @@ export default function Documentos({ empresas, docs, filtro }) {
         </>)}
         <div className="linha" style={{ marginTop: 12 }}>
           <button className="btn primario" disabled={aEnviar || !empresaId || !ficheiros.length}>{aEnviar ? 'A carregar…' : 'Carregar'}</button>
-          {estado && <span role="status" className="muted">{estado}</span>}
         </div>
       </form>
 
@@ -105,7 +134,7 @@ export default function Documentos({ empresas, docs, filtro }) {
                 <td><input defaultValue={d.titulo} onBlur={(e) => e.target.value !== d.titulo && atualizar(d.id, { titulo: e.target.value })} aria-label="Título" /></td>
                 <td>{d.empresas?.nome}</td>
                 <td><select value={d.tipo} onChange={(e) => atualizar(d.id, { tipo: e.target.value })} aria-label="Tipo">{TIPOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></td>
-                <td>{d.formato === 'excel' ? 'Excel' : 'PDF'}{d.capa_path ? '' : ' · sem capa'}</td>
+                <td>{d.formato === 'excel' ? 'Excel' : 'PDF'}{d.origem === 'webtuga' ? ' · Webtuga' : ''}{d.capa_path ? '' : ' · sem capa'}</td>
                 <td><input type="checkbox" style={{ width: 'auto' }} checked={d.ativo} onChange={(e) => atualizar(d.id, { ativo: e.target.checked })} aria-label="Visível" /></td>
                 <td className="linha"><a className="btn" href={`/documento/${d.id}?acao=ver`} target="_blank" rel="noopener">Ver</a><button className="btn perigo" onClick={() => apagar(d)}>Apagar</button></td>
               </tr>
